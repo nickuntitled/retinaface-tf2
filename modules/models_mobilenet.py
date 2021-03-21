@@ -1,7 +1,7 @@
 import tensorflow as tf
 from tensorflow.keras import Model
 from tensorflow.keras.applications import MobileNetV2, ResNet50
-from tensorflow.keras.layers import Input, Conv2D, ReLU, LeakyReLU, BatchNormalization, Add, Concatenate
+from tensorflow.keras.layers import Input, Conv2D, ReLU, LeakyReLU, BatchNormalization, Add, Concatenate, UpSampling2D
 from modules.anchor import decode_tf, prior_box_tf
 
 
@@ -90,14 +90,16 @@ def FPN(input1, input2, input3, out_ch, wd, name, **kwargs):
     output3 = ConvUnit(input3, f=out_ch, k=1, s=1, wd=wd, name=f'{name}_conv3')  # [20, 20, out_ch]
 
     #up3 = ResizeLayer(output2, name = "Resize1")(output3)
-    up_h, up_w = tf.shape(output2)[1], tf.shape(output2)[2]
-    up3 = tf.image.resize(output3, [up_h, up_w], method='nearest')
+    # up_h, up_w = tf.shape(output2)[1], tf.shape(output2)[2]
+    # up3 = tf.image.resize(output3, [up_h, up_w], method='nearest')
+    up3 = UpSampling2D(size=(2,2), interpolation='nearest')(output3)
     output2 = Add()([output2, up3])
     output2 = ConvUnit(output2, f=out_ch, k=3, s=1, wd=wd, name=f'{name}_merge2')
 
     #up2 = ResizeLayer(output1, name = 'Resize2')(output2)
-    up_h, up_w = tf.shape(output1)[1], tf.shape(output1)[2]
-    up2 = tf.image.resize(output2, [up_h, up_w], method='nearest')
+    #up_h, up_w = tf.shape(output1)[1], tf.shape(output1)[2]
+    #up2 = tf.image.resize(output2, [up_h, up_w], method='nearest')
+    up2 = UpSampling2D(size=(2,2), interpolation='nearest')(output2)
     output1 = Add()([output1, up2])
     output1 = ConvUnit(output1, f=out_ch, k=3, s=1, wd=wd, name=f'{name}_merge1' )
 

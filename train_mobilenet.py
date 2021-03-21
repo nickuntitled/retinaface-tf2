@@ -75,16 +75,16 @@ def main(_):
             predictions = model(inputs, training=True)
 
             # Resize Reshape by
-            reshape_size = predictions[3][0].shape[0] * predictions[3][0].shape[1] * len(cfg['min_sizes'][0])
+            num_anchor = len(cfg['min_sizes'][0])
 
             # Bbox
-            bbox = Concatenate(axis=1)([tf.reshape(x, [-1, reshape_size, 4]) for x in predictions[0]])
+            bbox = Concatenate(axis=1)([tf.reshape(x, [cfg['batch_size'], -1, 4]) for i,x in enumerate(predictions[0])])
 
             # Landmark
-            landmark = Concatenate(axis=1)([tf.reshape(x, [-1, reshape_size, 10]) for x in predictions[1]])
+            landmark = Concatenate(axis=1)([tf.reshape(x, [cfg['batch_size'], -1, 10]) for i,x in enumerate(predictions[1])])
 
             # Classifications
-            classifications = Concatenate(axis=1)([tf.reshape(x, [-1, reshape_size, 2]) for x in predictions[2]])
+            classifications = Concatenate(axis=1)([tf.reshape(x, [cfg['batch_size'], -1, 2]) for i,x in enumerate(predictions[2])])
             classifications = tf.keras.layers.Softmax(axis=-1)(classifications)
 
             predictions = (bbox, landmark, classifications)
