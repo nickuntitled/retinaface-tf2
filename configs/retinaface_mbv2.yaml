@@ -1,5 +1,5 @@
 # general setting
-batch_size: 16
+batch_size: 8 #16
 input_size: 640
 backbone_type: 'MobileNetV2'  # 'ResNet50', 'MobileNetV2'
 sub_name: 'retinaface_mbv2'
