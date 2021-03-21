@@ -9,3 +9,4 @@ data/*/**/*.jpg
 data/widerface/**/*.txt
 widerface_evaluate/*
 results/*
+venv/
