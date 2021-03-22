@@ -9,5 +9,7 @@ data/*/**/*.jpg
 data/widerface/**/*.txt
 widerface_evaluate/*
 results/*
-venv/
+venv/*
 checkpoints_old/*
+saved_model/*
+

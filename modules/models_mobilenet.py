@@ -167,28 +167,6 @@ def RetinaFaceModel(cfg, training=False, iou_th=0.4, score_th=0.02,
     classifications = [ClassHead(f, num_anchor, wd=wd, name=f'Class_{i}')
          for i, f in enumerate(features)]
 
-    #classifications = tf.keras.layers.Softmax(axis=-1)(classifications)
-
-    #if training:
     out = (bbox_regressions, landm_regressions, classifications, features)
     
-    #else:
-        # only for batch size 1
-    #    preds = tf.concat(  # [bboxes, landms, landms_valid, conf]
-    #        [bbox_regressions[0], landm_regressions[0],
-    #         tf.ones_like(classifications[0, :, 0][..., tf.newaxis]),
-    #         classifications[0, :, 1][..., tf.newaxis]], 1)
-    #    priors = prior_box_tf((tf.shape(inputs)[1], tf.shape(inputs)[2]),
-    #                          cfg['min_sizes'],  cfg['steps'], cfg['clip'])
-    #    decode_preds = decode_tf(preds, priors, cfg['variances'])
-
-    #    selected_indices = tf.image.non_max_suppression(
-    #        boxes=decode_preds[:, :4],
-    #        scores=decode_preds[:, -1],
-    #        max_output_size=tf.shape(decode_preds)[0],
-    #        iou_threshold=iou_th,
-    #        score_threshold=score_th)
-
-    #    out = tf.gather(decode_preds, selected_indices)
-
     return Model(inputs, out, name=name)
