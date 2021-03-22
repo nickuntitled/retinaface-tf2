@@ -99,11 +99,11 @@ class FPN(tf.keras.layers.Layer):
         if (out_ch <= 64):
             act = 'lrelu'
 
-        self.output1 = ConvUnit(f=out_ch, k=1, s=1, wd=wd, act=act)
-        self.output2 = ConvUnit(f=out_ch, k=1, s=1, wd=wd, act=act)
-        self.output3 = ConvUnit(f=out_ch, k=1, s=1, wd=wd, act=act)
-        self.merge1 = ConvUnit(f=out_ch, k=3, s=1, wd=wd, act=act)
-        self.merge2 = ConvUnit(f=out_ch, k=3, s=1, wd=wd, act=act)
+        self.output1 = ConvUnit(f=out_ch, k=1, s=1, wd=wd, act=act, name=f'{name}_conv1')
+        self.output2 = ConvUnit(f=out_ch, k=1, s=1, wd=wd, act=act, name=f'{name}_conv2')
+        self.output3 = ConvUnit(f=out_ch, k=1, s=1, wd=wd, act=act, name=f'{name}_conv3')
+        self.merge1 = ConvUnit(f=out_ch, k=3, s=1, wd=wd, act=act, name=f'{name}_merge1')
+        self.merge2 = ConvUnit(f=out_ch, k=3, s=1, wd=wd, act=act, name=f'{name}_merge2')
 
     def call(self, x):
         output1 = self.output1(x[0])  # [80, 80, out_ch]
@@ -132,13 +132,13 @@ class SSH(tf.keras.layers.Layer):
         if (out_ch <= 64):
             act = 'lrelu'
 
-        self.conv_3x3 = ConvUnit(f=out_ch // 2, k=3, s=1, wd=wd, act=None)
+        self.conv_3x3 = ConvUnit(f=out_ch // 2, k=3, s=1, wd=wd, act=None, name=f'{name}_conv1')
 
-        self.conv_5x5_1 = ConvUnit(f=out_ch // 4, k=3, s=1, wd=wd, act=act)
-        self.conv_5x5_2 = ConvUnit(f=out_ch // 4, k=3, s=1, wd=wd, act=None)
+        self.conv_5x5_1 = ConvUnit(f=out_ch // 4, k=3, s=1, wd=wd, act=act, name=f'{name}_conv2')
+        self.conv_5x5_2 = ConvUnit(f=out_ch // 4, k=3, s=1, wd=wd, act=None, name=f'{name}_conv3')
 
-        self.conv_7x7_2 = ConvUnit(f=out_ch // 4, k=3, s=1, wd=wd, act=act)
-        self.conv_7x7_3 = ConvUnit(f=out_ch // 4, k=3, s=1, wd=wd, act=None)
+        self.conv_7x7_2 = ConvUnit(f=out_ch // 4, k=3, s=1, wd=wd, act=act, name=f'{name}_conv4')
+        self.conv_7x7_3 = ConvUnit(f=out_ch // 4, k=3, s=1, wd=wd, act=None, name=f'{name}_conv5')
 
         self.relu = ReLU()
 
@@ -162,7 +162,7 @@ class BboxHead(tf.keras.layers.Layer):
     def __init__(self, num_anchor, wd, name='BboxHead', **kwargs):
         super(BboxHead, self).__init__(name=name, **kwargs)
         self.num_anchor = num_anchor
-        self.conv = Conv2D(filters=num_anchor * 4, kernel_size=1, strides=1)
+        self.conv = Conv2D(filters=num_anchor * 4, kernel_size=1, strides=1, name=name)
 
     def call(self, x):
         h, w = tf.shape(x)[1], tf.shape(x)[2]
@@ -176,7 +176,7 @@ class LandmarkHead(tf.keras.layers.Layer):
     def __init__(self, num_anchor, wd, name='LandmarkHead', **kwargs):
         super(LandmarkHead, self).__init__(name=name, **kwargs)
         self.num_anchor = num_anchor
-        self.conv = Conv2D(filters=num_anchor * 10, kernel_size=1, strides=1)
+        self.conv = Conv2D(filters=num_anchor * 10, kernel_size=1, strides=1, name=name)
 
     def call(self, x):
         h, w = tf.shape(x)[1], tf.shape(x)[2]
@@ -190,7 +190,7 @@ class ClassHead(tf.keras.layers.Layer):
     def __init__(self, num_anchor, wd, name='ClassHead', **kwargs):
         super(ClassHead, self).__init__(name=name, **kwargs)
         self.num_anchor = num_anchor
-        self.conv = Conv2D(filters=num_anchor * 2, kernel_size=1, strides=1)
+        self.conv = Conv2D(filters=num_anchor * 2, kernel_size=1, strides=1, name=name)
 
     def call(self, x):
         h, w = tf.shape(x)[1], tf.shape(x)[2]
@@ -213,7 +213,7 @@ def RetinaFaceModel(cfg, training=False, iou_th=0.4, score_th=0.02,
 
     x = Backbone(backbone_type=backbone_type)(x)
 
-    fpn = FPN(out_ch=out_ch, wd=wd)(x)
+    fpn = FPN(out_ch=out_ch, wd=wd, name='FPN')(x)
 
     features = [SSH(out_ch=out_ch, wd=wd, name=f'SSH_{i}')(f)
                 for i, f in enumerate(fpn)]

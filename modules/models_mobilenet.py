@@ -1,7 +1,7 @@
 import tensorflow as tf
 from tensorflow.keras import Model
 from tensorflow.keras.applications import MobileNetV2, ResNet50
-from tensorflow.keras.layers import Input, Conv2D, ReLU, LeakyReLU, BatchNormalization, Add, Concatenate, UpSampling2D
+from tensorflow.keras.layers import Input, Conv2D, ReLU, LeakyReLU, Add, Concatenate, UpSampling2D, Reshape, Multiply
 from modules.anchor import decode_tf, prior_box_tf
 
 
@@ -15,24 +15,24 @@ def _kernel_init(scale=1.0, seed=None):
     return tf.keras.initializers.he_normal()
 
 
-#class BatchNormalization(tf.keras.layers.BatchNormalization):
-#    """Make trainable=False freeze BN for real (the og version is sad).
-#       ref: https://github.com/zzh8829/yolov3-tf2
-#    """
-#    def __init__(self, axis=-1, momentum=0.9, epsilon=1e-5, center=True,
-#                 scale=True, name=None, **kwargs):
-#        super(BatchNormalization, self).__init__(
-#            axis=axis, momentum=momentum, epsilon=epsilon, center=center,
-#            scale=scale, name=name, **kwargs)
+class BatchNormalization(tf.keras.layers.BatchNormalization):
+    """Make trainable=False freeze BN for real (the og version is sad).
+       ref: https://github.com/zzh8829/yolov3-tf2
+    """
+    def __init__(self, axis=-1, momentum=0.9, epsilon=1e-5, center=True,
+                 scale=True, name=None, **kwargs):
+        super(BatchNormalization, self).__init__(
+            axis=axis, momentum=momentum, epsilon=epsilon, center=center,
+            scale=scale, name=name, **kwargs)
 
-#    def call(self, x, training=False):
-#        if training is None:
-#            training = tf.constant(False)
-#        training = tf.logical_and(training, self.trainable)
+    def call(self, x, training=False):
+        if training is None:
+            training = tf.constant(False)
+        training = tf.logical_and(training, self.trainable)
 
-#        return super().call(x, training)
+        return super().call(x, training)
 
-# Custom Resize Layer
+#  Custom Resize Layer
 class ResizeLayer(tf.keras.layers.Layer):
     """Conv + BN + Act"""
     def __init__(self, imgtarget, name = "ResizeLayer", **kwargs):
@@ -70,7 +70,7 @@ def ConvUnit(x, f, k, s, wd, name, **kwargs):
                            kernel_initializer=_kernel_init(),
                            kernel_regularizer=_regularizer(wd),
                            use_bias=False, name=name)
-    bn = BatchNormalization()
+    bn = BatchNormalization(name=f'{name}_bn')
     act_fn = LeakyReLU(0.1)
 
     return act_fn(bn(conv(x)))
@@ -80,7 +80,7 @@ def ConvUnit_identity(x, f, k, s, wd, name, **kwargs):
                            kernel_initializer=_kernel_init(),
                            kernel_regularizer=_regularizer(wd),
                            use_bias=False, name=name)
-    bn = BatchNormalization()
+    bn = BatchNormalization(name=f'{name}_bn')
 
     return bn(conv(x))
 
@@ -89,14 +89,12 @@ def FPN(input1, input2, input3, out_ch, wd, name, **kwargs):
     output2 = ConvUnit(input2, f=out_ch, k=1, s=1, wd=wd, name=f'{name}_conv2')  # [40, 40, out_ch]
     output3 = ConvUnit(input3, f=out_ch, k=1, s=1, wd=wd, name=f'{name}_conv3')  # [20, 20, out_ch]
 
-    #up3 = ResizeLayer(output2, name = "Resize1")(output3)
-    # up_h, up_w = tf.shape(output2)[1], tf.shape(output2)[2]
-    # up3 = tf.image.resize(output3, [up_h, up_w], method='nearest')
+    #up_h, up_w = tf.shape(output2)[1], tf.shape(output2)[2]
+    #up3 = tf.image.resize(output3, [up_h, up_w], method='nearest')
     up3 = UpSampling2D(size=(2,2), interpolation='nearest')(output3)
     output2 = Add()([output2, up3])
     output2 = ConvUnit(output2, f=out_ch, k=3, s=1, wd=wd, name=f'{name}_merge2')
 
-    #up2 = ResizeLayer(output1, name = 'Resize2')(output2)
     #up_h, up_w = tf.shape(output1)[1], tf.shape(output1)[2]
     #up2 = tf.image.resize(output2, [up_h, up_w], method='nearest')
     up2 = UpSampling2D(size=(2,2), interpolation='nearest')(output2)
@@ -123,20 +121,19 @@ def BboxHead(x, num_anchor, wd, name):
     h, w = tf.shape(x)[1], tf.shape(x)[2]
     x = Conv2D(filters=num_anchor * 4, kernel_size=1, strides=1, name=name)(x)
 
-    return x #tf.reshape(x, [-1, h * w * num_anchor, 4])
+    return x #Reshape([-1, Multiply()([h,w,num_anchor]), 4])(x)
 
 def LandmarkHead(x, num_anchor, wd, name):
     h, w = tf.shape(x)[1], tf.shape(x)[2]
     x = Conv2D(filters=num_anchor * 10, kernel_size=1, strides=1, name=name)(x)
 
-    return x #tf.reshape(x, [-1, h * w * num_anchor, 10])
+    return x #Reshape([-1, Multiply()([h,w,num_anchor]), 10])(x)
 
 def ClassHead(x, num_anchor, wd, name):
     h, w = tf.shape(x)[1], tf.shape(x)[2]
     x = Conv2D(filters=num_anchor * 2, kernel_size=1, strides=1, name=name)(x)
 
-    return x #tf.reshape(x, [-1, h * w * num_anchor, 2])
-
+    return x #Reshape([-1, Multiply()([h,w,num_anchor]), 2])(x)
 
 def RetinaFaceModel(cfg, training=False, iou_th=0.4, score_th=0.02,
                     name='RetinaFaceModel'):
@@ -150,9 +147,7 @@ def RetinaFaceModel(cfg, training=False, iou_th=0.4, score_th=0.02,
     # define model
     x = inputs = Input([input_size, input_size, 3], name='input_image')
 
-    if training:
-        x = tf.keras.applications.mobilenet_v2.preprocess_input(x)
-
+    #if training:
     backbone_output1, backbone_output2, backbone_output3 = Backbone(x, backbone_type=backbone_type)
 
     fpn = FPN(backbone_output1, backbone_output2, backbone_output3 , out_ch=out_ch, wd=wd, name='FPN')
@@ -160,12 +155,15 @@ def RetinaFaceModel(cfg, training=False, iou_th=0.4, score_th=0.02,
     features = [SSH(f, out_ch=out_ch, wd=wd, name=f'SSH_{i}')
                 for i, f in enumerate(fpn)]
 
+    print('Bbox Regression')
     bbox_regressions = [BboxHead(f, num_anchor, wd=wd, name=f'BBox_{i}')
          for i, f in enumerate(features)]
 
-    landm_regressions = [LandmarkHead(f, num_anchor, wd=wd, name=f'Landm_{i}')
-         for i, f in enumerate(features)]
+    print('Landm Regression')
+    landm_regressions = [LandmarkHead(f, num_anchor, wd=wd, name=f'Landm_{i}') 
+        for i, f in enumerate(features)]
 
+    print('Classificaitons')
     classifications = [ClassHead(f, num_anchor, wd=wd, name=f'Class_{i}')
          for i, f in enumerate(features)]
 

@@ -6,7 +6,8 @@ import pathlib
 import numpy as np
 import tensorflow as tf
 
-from modules.models_mobilenet import RetinaFaceModel
+from modules.models_mobilenet import RetinaFaceModel as newer_model
+from modules.models import RetinaFaceModel
 from modules.utils import (set_memory_growth, load_yaml, draw_bbox_landm,
                            pad_input_image, recover_pad_output)
 from modules.anchor import decode_tf, prior_box_tf
@@ -76,6 +77,8 @@ def main(_argv):
     model = RetinaFaceModel(cfg, training=False, iou_th=FLAGS.iou_th,
                             score_th=FLAGS.score_th)
 
+    model_separate = newer_model(cfg, training=False, iou_th=FLAGS.iou_th, score_th=FLAGS.score_th)
+
     # load checkpoint
     checkpoint_dir = './checkpoints/' + cfg['sub_name']
     checkpoint = tf.train.Checkpoint(model=model)
@@ -87,6 +90,52 @@ def main(_argv):
         print("[*] Cannot find ckpt from {}.".format(checkpoint_dir))
         exit()
 
+    baselayer_weight = model.get_layer('MobileNetV2_extrator').get_weights()
+    model_separate.get_layer('Mobilenet_Extractor').set_weights(baselayer_weight)
+    print('Finish Transferring Weight from Base Model')
+
+    fpnlayer = model.get_layer('FPN')
+    model_separate.get_layer('FPN_conv1').set_weights(fpnlayer.output1.conv.get_weights())
+    model_separate.get_layer('FPN_conv1_bn').set_weights(fpnlayer.output1.bn.get_weights())
+    model_separate.get_layer('FPN_conv2').set_weights(fpnlayer.output2.conv.get_weights())
+    model_separate.get_layer('FPN_conv2_bn').set_weights(fpnlayer.output2.bn.get_weights())
+    model_separate.get_layer('FPN_conv3').set_weights(fpnlayer.output3.conv.get_weights())
+    model_separate.get_layer('FPN_conv3_bn').set_weights(fpnlayer.output3.bn.get_weights())
+    model_separate.get_layer('FPN_merge1').set_weights(fpnlayer.merge1.conv.get_weights())
+    model_separate.get_layer('FPN_merge1_bn').set_weights(fpnlayer.merge1.bn.get_weights())
+    model_separate.get_layer('FPN_merge2').set_weights(fpnlayer.merge2.conv.get_weights())
+    model_separate.get_layer('FPN_merge2_bn').set_weights(fpnlayer.merge2.bn.get_weights())
+
+    print('Finish transferring Weight FPN')
+
+    for i in range(3):
+        name = f'SSH_{i}'
+        sshlayer = model.get_layer(name)
+        model_separate.get_layer(f'{name}_conv1').set_weights(sshlayer.conv_3x3.conv.get_weights())
+        model_separate.get_layer(f'{name}_conv1_bn').set_weights(sshlayer.conv_3x3.bn.get_weights())
+        model_separate.get_layer(f'{name}_conv2').set_weights(sshlayer.conv_5x5_1.conv.get_weights())
+        model_separate.get_layer(f'{name}_conv2_bn').set_weights(sshlayer.conv_5x5_1.bn.get_weights())
+        model_separate.get_layer(f'{name}_conv3').set_weights(sshlayer.conv_5x5_2.conv.get_weights())
+        model_separate.get_layer(f'{name}_conv3_bn').set_weights(sshlayer.conv_5x5_2.bn.get_weights())
+        model_separate.get_layer(f'{name}_conv4').set_weights(sshlayer.conv_7x7_2.conv.get_weights())
+        model_separate.get_layer(f'{name}_conv4_bn').set_weights(sshlayer.conv_7x7_2.bn.get_weights())
+        model_separate.get_layer(f'{name}_conv5').set_weights(sshlayer.conv_7x7_3.conv.get_weights())
+        model_separate.get_layer(f'{name}_conv5_bn').set_weights(sshlayer.conv_7x7_3.bn.get_weights())
+
+        print('Finish transferring Weight SSH {}'.format(i))
+
+        denselayer = model.get_layer(f'ClassHead_{i}')
+        model_separate.get_layer(f'Class_{i}').set_weights(denselayer.conv.get_weights())
+        print('Finish transferring Weight ClassHead')
+        
+        denselayer = model.get_layer(f'LandmarkHead_{i}')
+        model_separate.get_layer(f'Landm_{i}').set_weights(denselayer.conv.get_weights())
+        print('Finish transferring Weight LandmarkHead')
+
+        denselayer = model.get_layer(f'BboxHead_{i}')
+        model_separate.get_layer(f'BBox_{i}').set_weights(denselayer.conv.get_weights())
+        print('Finish transferring Weight BboxHead')
+    
     # evaluation on testing dataset
     testset_folder = cfg['testing_dataset_path']
     testset_list = os.path.join(testset_folder, 'label.txt')
@@ -124,11 +173,11 @@ def main(_argv):
 
         # run model
         inputs = img[np.newaxis, ...]
-        predictions = model(inputs)
+        x = tf.keras.applications.mobilenet_v2.preprocess_input(inputs)
+        predictions = model_separate(x)
 
         # Recover the bounding box, landmark and classifications
         # Resize Reshape by
-        num_anchor = len(cfg['min_sizes'][0])
 
         # Bbox
         bbox_regressions = Concatenate(axis=1)([tf.reshape(x, [1, -1, 4]) for i,x in enumerate(predictions[0])])
